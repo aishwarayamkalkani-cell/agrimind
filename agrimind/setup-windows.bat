@@ -17,7 +17,7 @@ if %errorlevel%==0 (
   echo No NVIDIA GPU detected - installing CPU build of PyTorch...
   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 )
-pip install -r requirements.txt || (pause & exit /b 1)
+pip install -r requirements-full.txt || (pause & exit /b 1)
 if not exist .env copy .env.example .env >nul
 echo Re-training the crop recommendation model for your scikit-learn version...
 python training\train_crop.py

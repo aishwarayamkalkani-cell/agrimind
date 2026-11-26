@@ -196,8 +196,10 @@ def irrigation_plan(crop, stage, et0_days: list[float], rain_days: list[float], 
 # ------------------------------------------------------------------ district crop statistics
 @lru_cache
 def _production():
-    d = pd.read_csv(DATA / "district_crop_production.csv.gz")
-    d["Season"] = d["Season"].str.strip()
+    # Categorical text columns: ~6 MB in memory instead of ~58 MB.
+    cats = {c: "category" for c in ("State_Name", "District_Name", "Season", "Crop")}
+    d = pd.read_csv(DATA / "district_crop_production.csv.gz", dtype=cats)
+    d["Season"] = d["Season"].cat.rename_categories(lambda x: str(x).strip())
     return d
 
 
@@ -223,13 +225,13 @@ def crop_stats(state, district=None, season=None):
         return {"top_crops": [], "trend": [], "seasons": []}
     last = int(d.Crop_Year.max())
     recent = d[d.Crop_Year >= last - 4]
-    g = recent.groupby("Crop").agg(area=("Area", "sum"), production=("Production", "sum"), years=("Crop_Year", "nunique")).reset_index()
+    g = recent.groupby("Crop", observed=True).agg(area=("Area", "sum"), production=("Production", "sum"), years=("Crop_Year", "nunique")).reset_index()
     g["avg_area_ha"] = g.area / g.years
     g["yield_t_per_ha"] = np.where(g.area > 0, g.production / g.area, np.nan)
     g = g.sort_values("avg_area_ha", ascending=False).head(12)
     top_names = list(g.Crop.head(5))
-    trend = d[d.Crop.isin(top_names)].groupby(["Crop_Year", "Crop"]).Area.sum().unstack(fill_value=0).reset_index()
-    seas = recent.groupby("Season").Area.sum().sort_values(ascending=False)
+    trend = d[d.Crop.isin(top_names)].groupby(["Crop_Year", "Crop"], observed=True).Area.sum().unstack(fill_value=0).reset_index()
+    seas = recent.groupby("Season", observed=True).Area.sum().sort_values(ascending=False)
     return {"period": f"{last - 4}–{last}",
             "top_crops": [{"crop": r.Crop, "avg_area_ha": round(float(r.avg_area_ha), 1),
                            "yield": None if np.isnan(r.yield_t_per_ha) else round(float(r.yield_t_per_ha), 2)}

@@ -1,6 +1,7 @@
 """Crop disease inference with the trained MobileNetV3 model."""
 import io
 import json
+import os
 import threading
 
 import numpy as np
@@ -38,7 +39,13 @@ class DiseaseModel:
             try:
                 import onnxruntime as ort
                 meta = json.loads((MODELS / "disease_classes.json").read_text())
-                self.session = ort.InferenceSession(str(MODELS / "disease_model.onnx"), providers=["CPUExecutionProvider"])
+                so = ort.SessionOptions()
+                so.enable_cpu_mem_arena = False  # return activation memory after each call instead of caching it
+                so.enable_mem_pattern = False
+                so.intra_op_num_threads = int(os.environ.get("ONNX_THREADS", "1"))
+                so.inter_op_num_threads = 1
+                self.session = ort.InferenceSession(str(MODELS / "disease_model.onnx"), sess_options=so,
+                                                    providers=["CPUExecutionProvider"])
                 self.classes, self.size, self.device, self.backend = meta["classes"], meta["image_size"], "cpu", "onnx"
                 self.model = self.session
                 return

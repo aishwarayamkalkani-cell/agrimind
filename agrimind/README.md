@@ -40,10 +40,28 @@ Install Ollama from <https://ollama.com>, run `ollama pull llama3.2:3b` (or any 
 ### Linux / macOS
 ```bash
 cd backend && python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt && python training/train_crop.py
+pip install -r requirements-full.txt && python training/train_crop.py
 cd .. && ./start-dev.sh
 ```
 Frontend development with hot reload: `cd frontend && npm install && npm run dev` (proxies `/api` to port 8000).
+
+---
+
+## 1a. Deploy online (Render free tier, 512 MB RAM)
+
+The repository is ready for Render: `render.yaml` deploys the **lite build** (`backend/requirements.txt`).
+
+* No PyTorch or Sentence-Transformer: leaf-disease detection runs the same MobileNetV3 model exported to ONNX
+  (`backend/models/disease_model.onnx`, identical predictions on all 19 sample leaves) and knowledge search uses
+  keyword (TF-IDF) retrieval. Nothing is trained at build or startup; library versions are pinned so the bundled crop
+  model loads directly.
+* Measured memory: about 233 MB after startup and **364 MB peak** with 8–16 parallel requests over every feature.
+* Steps: push to GitHub → Render → **New + → Blueprint** → pick the repo → paste `XAI_API_KEY` → **Apply**.
+* Environment switches: `AGRIMIND_LITE=1` / `EMBEDDING_BACKEND=tfidf` force keyword search (automatic on Render);
+  `EMBEDDING_BACKEND=sentence-transformers` with `requirements-full.txt` restores multilingual semantic search on a
+  machine with 2 GB+ RAM. Render's free disk is temporary: accounts and chats reset when the service restarts.
+* The `Dockerfile` builds the same lite image for any Docker host and listens on `$PORT`.
+* `python backend/scripts/e2e_smoke.py http://127.0.0.1:8000 backend` exercises every feature against a fresh running server.
 
 ---
 

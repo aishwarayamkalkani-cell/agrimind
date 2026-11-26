@@ -98,9 +98,27 @@ def chunk(segments, size=900, overlap=150):
 
 
 # ------------------------------------------------------------------ embeddings
+def embedding_backend() -> str:
+    """'tfidf' (keyword search, low memory) or 'sentence-transformers' (multilingual semantic search).
+
+    EMBEDDING_BACKEND=auto (default) picks keyword search on Render or when AGRIMIND_LITE=1,
+    and the Sentence-Transformer elsewhere (if installed)."""
+    mode = os.environ.get("EMBEDDING_BACKEND", "auto").strip().lower()
+    if mode in ("tfidf", "keyword", "lite"):
+        return "tfidf"
+    if mode == "auto" and (os.environ.get("RENDER") or os.environ.get("AGRIMIND_LITE", "").strip() in ("1", "true", "yes")):
+        return "tfidf"
+    return "sentence-transformers"
+
+
 class Embedder:
     def __init__(self, name: str):
-        self.name, self.kind, self.model, self.vec = name, None, None, None
+        self.name, self.kind, self.model, self.vec, self.error = name, None, None, None, None
+        if embedding_backend() == "tfidf":  # lite mode: never import torch / load the 470 MB model
+            self.kind, self.device, self.dim, self.lite = "tfidf-fallback", "cpu", None, True
+            log.info("Lite mode: keyword (TF-IDF) retrieval; Sentence-Transformer not loaded.")
+            return
+        self.lite = False
         try:
             import torch
             from sentence_transformers import SentenceTransformer
@@ -109,7 +127,7 @@ class Embedder:
             self.kind, self.device = "sentence-transformers", device
             m = self.model
             self.dim = (m.get_embedding_dimension if hasattr(m, "get_embedding_dimension") else m.get_sentence_embedding_dimension)()
-        except Exception as e:  # noqa: BLE001  (no internet on first run, etc.)
+        except Exception as e:  # noqa: BLE001  (not installed, no internet on first run, etc.)
             log.warning("Sentence-Transformer '%s' unavailable (%s). Using TF-IDF/LSA fallback embeddings.", name, e)
             self.kind, self.device, self.dim, self.error = "tfidf-fallback", "cpu", None, str(e)[:300]
 
@@ -138,7 +156,10 @@ class Embedder:
 
     def info(self):
         d = {"kind": self.kind, "model": self.name, "dim": self.dim, "device": self.device}
-        if self.kind != "sentence-transformers":
+        if self.kind != "sentence-transformers" and getattr(self, "lite", False):
+            d["note"] = ("Lite mode (low-memory server): keyword TF-IDF retrieval. Set EMBEDDING_BACKEND=sentence-transformers "
+                         "on a machine with more RAM for multilingual semantic search.")
+        elif self.kind != "sentence-transformers":
             d["note"] = ("Sentence-Transformer model could not be loaded (it downloads from Hugging Face on first run). "
                          "Using a lexical TF-IDF fallback so search keeps working; semantic and cross-language "
                          "retrieval need the Sentence-Transformer model.")

@@ -182,9 +182,11 @@ def test_admin(client, admin, farmer):
     assert client.get("/api/admin/queries", headers=admin).json()
 
 
-def test_sentence_transformer_path(tmp_path):
+def test_sentence_transformer_path(tmp_path, monkeypatch):
     """Exercise the Sentence-Transformers branch with a tiny randomly initialised model built offline
-    (checks the integration, not retrieval quality)."""
+    (checks the integration, not retrieval quality). Skipped in the lite build, which does not install it."""
+    pytest.importorskip("sentence_transformers")
+    monkeypatch.setenv("EMBEDDING_BACKEND", "sentence-transformers")
     from sentence_transformers import SentenceTransformer, models
     from transformers import BertConfig, BertModel, BertTokenizerFast
     words = sorted(set(re.findall(r"[a-z]+", " ".join(p.read_text().lower() for p in (DATA / "knowledge").glob("*.md")))))[:3000]
