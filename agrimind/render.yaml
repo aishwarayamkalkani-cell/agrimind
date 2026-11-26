@@ -1,0 +1,17 @@
+# Render Blueprint: free web service running the lite build (fits in 512 MB RAM).
+services:
+  - type: web
+    name: agrimind-ai
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements-lite.txt && python training/train_crop.py
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: XAI_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
